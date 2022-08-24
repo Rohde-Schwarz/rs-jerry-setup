@@ -1,92 +1,197 @@
 # RS Jerry Setup
 
-R&S Jerry Setup scripts
+This repository contains setup and reset scripts in preparation to use the R&S Jerry Driver.  
 
-## Getting started
+Provided TRex is installed, there is a configuration file as well as a packet file to confirm everything is setup correctly.
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+## OS Support
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+All scripts were developed and intended to be used on Linux (Ubuntu 20.04 or newer).
 
-## Add your files
+## Preperation
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+Make sure the Grub command line is set up correctly (/etc/default/grub).
+Remember to `sudo update-grub` followed by a reboot after editing `/etc/default/grub`.
+
+    GRUB_CMDLINE_LINUX_DEFAULT="quiet intel_iommu=off default_hugepagesz=1G hugepagesz=1G hugepages=4 vfio.enable_unsafe_noiommu_mode=1"
+
+The `GRUB_CMDLINE_LINUX_DEFAULT` sets persistent options for the default-boot in a system.
+
+In this case:
+- `quiet` : suppress kernel logs
+- `intel_iommu=off` : turn off IOMMU, which is not supported at the moment
+- `default_hugepagesz=1G` : specify the default hugepage size in byte. Hugepages are required for faster allocation when reading big chunks of data from the network card
+- `hugepagesz=1G` : specify the hugepage size in byte
+- `hugepages=4` : the number of large hugepages to be allocated at boot time
+- `vfio.enable_unsafe_noiommu_mode=1` : if there is no IOMMU available on the system, VFIO can still be used, but it has to be loaded with an additional parameter
+
+## x520
+
+The Intel® Ethernet Controller X520 is the required network interface controller (NIC) to run this setup.
+
+The interface-setup script
+- reserves hugepages at run time needed by DPDK for the large memory pool allocation used for packet buffers
+- creates the VF
+- enables Rx ntuple filters and actions for the PF
+- updates the classification rule for udp4
+- specifies the destination IP address of the incoming packets for udp4
+- specifies the value of the destination port field
+- specifies the Rx queue to send packets to
+- increases the MTU
+- binds the VF
+
+in that order.
+
+### Setup
+The next step requires you to have DPDK installed.
+
+The interface-setup script requires the PCI-Address of the Physical Function (PF). The PCI-Address can be found by calling `dpdk-devbind.py -s` and is represented by the leftmost digits usually in the form of `0000:00:00.0`.
+To simplify the proccess since the IP address of the PF is needed, it is recommended but not required to have a static IP address bound to the PF.
+
+To view information on how to use the interface-setup script:
+```
+sudo ./x520-setup-interface.sh -h
+```
+
+### Result
+After executing the setup script, a VF is created and ready to recieve data.
+`x520-setup-interface.sh` can be called multiple times to create multiple VFs.
+Created VFs can be viewed via `dpdk-devbind.py -s`.
+
+### Reset
+
+It is recommened to execute the reset in the opposite direction of the setup:
+First reset all the VFs created by `x520-setup-interface.sh` with `x520-reset-interface.sh`.
+Afterwards reset the hugepages with `x520-reset-basic.sh`
+
+The `x520-reset-interface.sh` script allows to remove single VFs without affecting other existing VFs.
+
+To view information on how to reset a specific interface:
+```
+sudo ./x520-reset-interface.sh -h
+```
+
+Resetting hugepages:
+```
+sudo ./x520-reset-basic.sh
+```
+
+## x710
+
+The Intel® Ethernet Controller X710 is the required network interface controller (NIC) to run this setup.
+
+Make sure the latest compatible [i40e Driver](https://www.intel.com/content/www/us/en/download/18026/intel-network-adapter-driver-for-pcie-40-gigabit-ethernet-network-connections-under-linux.html) is installed for your system.
+Usually the built-in i40e Driver does **not** suffice.
+
+Additionally `ethtool` should be version 4.11 or later.
+
+The interface-setup script
+- creates the VF
+- trust the specified VF such that it can set specific features
+- enables Rx ntuple filters and actions for the PF
+- updates the classification rule for udp4
+- specifies the destination IP address of the incoming packets for udp4
+- enable cloud filter to split traffic to PF or VF
+- specifies the Rx queue to send packets to
+- increases MTU
+
+in that order.
+
+### Setup
+
+DPDK is required to be installed.
+
+Calling `dpdk-devbind.py -s` displays all network devices.
+Interface names are usually displayed as `if=<Interface>` and required for the interface-setup script.
+To view information on how to use the interface-setup script:
+```
+cd ./x710
+sudo ./x710-setup-interface.sh -h
+```
+
+The final call is to `dpdk-devbind.py -s` again which now also displays the newly created VF as well as the other network devices like before.
+The VF address is represented by the leftmost digits usually in the form of `0000:00:00.0`.
+All VF addresses can also be displayed direclty via:
+```
+dpdk-devbind.py -s | grep 'Virtual Function' | cut -d" " -f1
+```
+
+Bind the displayed new VF address:
+```
+sudo ./x710-bind-vf.sh <VF address>
+```
+
+After binding the VF, `dpdk-devbind.py -s` gets called again. The bound VF should be listed under `Network devices using DPDK-compatible driver`.
+
+### Result
+After executing the setup scripts, a VF is created and ready to recieve data.
+`x710-setup-interface.sh` can be called multiple times to create multiple VFs.
+Created VFs can be viewed via `dpdk-devbind.py -s`.
+
+### Reset
+
+It is recommened to execute the reset in the opposite direction of the setup:
+First reset all the VF created by `x710-setup-interface.sh` with `x710-reset-interface.sh`.
+Afterwards reset the basic things of `x710-setup-basic.sh` with `x710-reset-basic.sh`
+
+To view information on how to reset a specific interface:
+```
+sudo ./x710-reset.sh -h
+```
+
+## Loopback via TRex (Optional)
+
+Loopback requires the [TRex core](https://github.com/cisco-system-traffic-generator/trex-core) to be build on the system.
+
+The `hrzr_packet.py` generates sin waves according to the HRZR protocol and sends it from a specified VF (related to the IP address of the PF) to a diffrent VF (again, related to the IP address of the PF).
+
+### Setup
 
 ```
-cd existing_repo
-git remote add origin https://code.rsint.net/8SI-EU/8SIN/icpx/rs-jerry-setup.git
-git branch -M main
-git push -uf origin main
+cd trex-files
 ```
 
-## Integrate with your tools
+Edit `trex_cfg.yaml` and insert into `interfaces    : ["xx:xx.x", "dummy"]` the last digits of the VF address you want to send from.
 
-- [ ] [Set up project integrations](https://code.rsint.net/8SI-EU/8SIN/icpx/rs-jerry-setup/-/settings/integrations)
+Edit `hrzr_packet.py` and edit the following line:
+```
+base_pkt =  Ether(dst="ff:ff:ff:ff:ff:ff")/IP(src="xxx.xxx.xx.x", dst="xxx.xxx.xx.x")/UDP(dport=0,sport=1025)/b'\x00\x00\x00\x00\x00\x00\x00\x00'/array#/
+```
+such that
+- `src="xxx.xxx.xx.x"` holds the IP address of the PF you want to send traffic from
+- `dst="xxx.xxx.xx.x"` holds the IP address of the PF you want to send traffic to
+- `dport=0` holds the port of the PF you want to send traffic to
 
-## Collaborate with your team
+### Start
+_In the trex-core directory of the TRex core repository:_  
+Start your scapy server with the edited configuration. Usually via:
+```
+cd ./scripts
+./t-rex-64 -i --cfg <full_path_to>/trex-files/trex_cfg.yaml
+```
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Automatically merge when pipeline succeeds](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
+Wait for the scapy server to load.
 
-## Test and Deploy
+In a different console window, open the trex-console. Usually via:
+```
+cd ./scripts
+./trex-console
+```
 
-Use the built-in continuous integration in GitLab.
+_In the trex-console_  
+Start the data generation with the hrzr_packet.py. Usually via:
+```
+start -f <full_path_to>/trex-files/hrzr_packet.py -m 1000mbps
+```
+The trex-console can be closed afterwards.
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing(SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+To see the if the VF sends correctly:
+```
+watch -n 0.5 -d 'ethtool -S <interface> | grep tx | grep -v ": 0"'
 
-***
+```
 
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thank you to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+To see the if the VF receives correctly:
+```
+watch -n 0.5 -d 'ethtool -S <interface> | grep rx | grep -v ": 0"'
+```
