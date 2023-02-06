@@ -8,7 +8,7 @@ Provided TRex is installed, there is a configuration file as well as a packet fi
 
 All scripts were developed and intended to be used on Linux (Ubuntu 20.04 or newer).
 
-## Preperation
+## Preparation
 
 Make sure the Grub command line is set up correctly (/etc/default/grub).
 Remember to `sudo update-grub` followed by a reboot after editing `/etc/default/grub`.
