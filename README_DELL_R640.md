@@ -105,114 +105,51 @@ iface enp179s0f1 inet static
 
 ```
 
-
-The interface-setup script
-- creates the VF
-- trust the specified VF such that it can set specific features
-- enables Rx ntuple filters and actions for the PF
-- updates the classification rule for udp4
-- specifies the destination IP address of the incoming packets for udp4
-- enable cloud filter to split traffic to PF or VF
-- specifies the Rx queue to send packets to
-- increases MTU
-
-in that order.
-
-### Setup
-
-DPDK is required to be installed.
-
-Calling `dpdk-devbind.py -s` displays all network devices.
-Interface names are usually displayed as `if=<Interface>` and required for the interface-setup script.
-To view information on how to use the interface-setup script:
-```
-cd ./x710
-sudo ./x710-setup-interface.sh -h
-```
-
-The final call is to `dpdk-devbind.py -s` again which now also displays the newly created VF as well as the other network devices like before.
-The VF address is represented by the leftmost digits usually in the form of `0000:00:00.0`.
-All VF addresses can also be displayed direclty via:
-```
-dpdk-devbind.py -s | grep 'Virtual Function' | cut -d" " -f1
-```
-
-Bind the displayed new VF address:
-```
-sudo ./x710-bind-vf.sh <VF address>
-```
-
-After binding the VF, `dpdk-devbind.py -s` gets called again. The bound VF should be listed under `Network devices using DPDK-compatible driver`.
-
-### Result
-After executing the setup scripts, a VF is created and ready to recieve data.
-`x710-setup-interface.sh` can be called multiple times to create multiple VFs.
-Created VFs can be viewed via `dpdk-devbind.py -s`.
-
-### Reset
-
-It is recommened to execute the reset in the opposite direction of the setup:
-First reset all the VF created by `x710-setup-interface.sh` with `x710-reset-interface.sh`.
-Afterwards reset the basic things of `x710-setup-basic.sh` with `x710-reset-basic.sh`
-
-To view information on how to reset a specific interface:
-```
-sudo ./x710-reset.sh -h
-```
-
-## Loopback via TRex (Optional)
-
-Loopback requires the [TRex core](https://github.com/cisco-system-traffic-generator/trex-core) to be build on the system.
-
-The `hrzr_packet.py` generates sin waves according to the HRZR protocol and sends it from a specified VF (related to the IP address of the PF) to a diffrent VF (again, related to the IP address of the PF).
-
-### Setup
+### Prepare Service Files 
+To have the virtual functions created and connected with the vfio-pci driver on startup, requires a service which handles that work.
+The files for this can be found in the folder "dell_r640". 
+Open the `setup_10G_VF.sh` and replace the wrong interface names with your personal correct ones.
+Do the same for the PCIID's as well, note that the PCIID's are the id's of the Virtual Functions created by the script `x710-setup-interfaces.sh`.
+Create a folder at `/opt/rohde-schwarz/setup_10g_iq_streamer/` and copy `setup_10G_VF.sh` as well as the files from the x710 folder there.
+Copy the `setup_10G_VF.service` to `/etc/systemd/system/` and enable the service.
 
 ```
-cd trex-files
+systemctl daemon-reload
+systemctl enable setup_10G_VF.service
 ```
 
-Edit `trex_cfg.yaml` and insert into `interfaces    : ["xx:xx.x", "dummy"]` the last digits of the VF address you want to send from.
+### Final Check
+To ensure that everything worked as expected, reboot the server. After the system is back up again run `ip a` and check the interfaces for the correct ip-adresses. 
+The result should look similar to the following example. 
 
-Edit `hrzr_packet.py` and edit the following line:
 ```
-base_pkt =  Ether(dst="ff:ff:ff:ff:ff:ff")/IP(src="xxx.xxx.xx.x", dst="xxx.xxx.xx.x")/UDP(dport=0,sport=1025)/b'\x00\x00\x00\x00\x00\x00\x00\x00'/array#/
-```
-such that
-- `src="xxx.xxx.xx.x"` holds the IP address of the PF you want to send traffic from
-- `dst="xxx.xxx.xx.x"` holds the IP address of the PF you want to send traffic to
-- `dport=0` holds the port of the PF you want to send traffic to
-
-### Start
-_In the trex-core directory of the TRex core repository:_  
-Start your scapy server with the edited configuration. Usually via:
-```
-cd ./scripts
-./t-rex-64 -i --cfg <full_path_to>/trex-files/trex_cfg.yaml
-```
-
-Wait for the scapy server to load.
-
-In a different console window, open the trex-console. Usually via:
-```
-cd ./scripts
-./trex-console
-```
-
-_In the trex-console_  
-Start the data generation with the hrzr_packet.py. Usually via:
-```
-start -f <full_path_to>/trex-files/hrzr_packet.py -m 1000mbps
-```
-The trex-console can be closed afterwards.
-
-To see the if the VF sends correctly:
-```
-watch -n 0.5 -d 'ethtool -S <interface> | grep tx | grep -v ": 0"'
+1: enp101s0f0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 9000 qdisc mq state DOWN group default qlen 1000
+    link/ether ################ brd ff:ff:ff:ff:ff:ff
+    inet 192.168.10.10/24 brd 192.168.10.255 scope global enp101s0f0
+       valid_lft forever preferred_lft forever
+2: enp101s0f1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 9000 qdisc mq state UP group default qlen 1000
+    link/ether ################ brd ff:ff:ff:ff:ff:ff
+    inet 192.168.20.10/24 brd 192.168.20.255 scope global enp101s0f1
+       valid_lft forever preferred_lft forever
+    inet6 fe80::6efe:54ff:fe12:61a1/64 scope link 
+       valid_lft forever preferred_lft forever
+3: enp179s0f0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 9000 qdisc mq state UP group default qlen 1000
+    link/ether ################ brd ff:ff:ff:ff:ff:ff
+    inet 192.168.20.1/24 brd 192.168.20.255 scope global enp179s0f0
+       valid_lft forever preferred_lft forever
+    inet6 fe80::6efe:54ff:fe3e:6900/64 scope link 
+       valid_lft forever preferred_lft forever
+4: enp179s0f1: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 9000 qdisc mq state DOWN group default qlen 1000
+    link/ether ################ brd ff:ff:ff:ff:ff:ff
+    inet 192.168.10.1/24 brd 192.168.10.255 scope global enp179s0f1
+       valid_lft forever preferred_lft forever
 
 ```
 
-To see the if the VF receives correctly:
+Run `lspci | grep Virtual` to check whether the Virtual Functions have been created. If the output looks similar to the following example, everything should be fine.
 ```
-watch -n 0.5 -d 'ethtool -S <interface> | grep rx | grep -v ": 0"'
+65:02.0 Ethernet controller: Intel Corporation Ethernet Virtual Function 700 Series (rev 02)
+65:0a.0 Ethernet controller: Intel Corporation Ethernet Virtual Function 700 Series (rev 02)
+b3:02.0 Ethernet controller: Intel Corporation Ethernet Virtual Function 700 Series (rev 02)
+b3:0a.0 Ethernet controller: Intel Corporation Ethernet Virtual Function 700 Series (rev 02)
 ```
