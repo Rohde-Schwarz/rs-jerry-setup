@@ -19,11 +19,9 @@ The `GRUB_CMDLINE_LINUX_DEFAULT` sets persistent options for the default-boot in
 
 In this case:
 - `quiet` : suppress kernel logs
-- `intel_iommu=off` : turn off IOMMU, which is not supported at the moment
 - `default_hugepagesz=1G` : specify the default hugepage size in byte. Hugepages are required for faster allocation when reading big chunks of data from the network card
 - `hugepagesz=1G` : specify the hugepage size in byte
 - `hugepages=4` : the number of large hugepages to be allocated at boot time
-- `vfio.enable_unsafe_noiommu_mode=1` : if there is no IOMMU available on the system, VFIO can still be used, but it has to be loaded with an additional parameter
 
 ## x520
 
