@@ -13,7 +13,7 @@ All scripts were developed and intended to be used on Linux (Ubuntu 20.04 or new
 Make sure the Grub command line is set up correctly (/etc/default/grub).
 Remember to `sudo update-grub` followed by a reboot after editing `/etc/default/grub`.
 
-    GRUB_CMDLINE_LINUX_DEFAULT="quiet intel_iommu=off default_hugepagesz=1G hugepagesz=1G hugepages=4 vfio.enable_unsafe_noiommu_mode=1"
+    GRUB_CMDLINE_LINUX_DEFAULT="quiet default_hugepagesz=1G hugepagesz=1G hugepages=4"
 
 The `GRUB_CMDLINE_LINUX_DEFAULT` sets persistent options for the default-boot in a system.
 
