@@ -4,7 +4,7 @@ This repository contains setup and reset scripts in preparation to use the R&S J
 
 Provided TRex is installed, there is a configuration file as well as a packet file to confirm everything is setup correctly.
 
-* For Dell servers, there is a detailed guideline [here](https://github.com/Rohde-Schwarz/rs-jerry-setup/blob/main/README_DELL_R640.md). *
+**For Dell servers, there is a detailed guideline [here](https://github.com/Rohde-Schwarz/rs-jerry-setup/blob/main/README_DELL_R640.md).**
 
 ## OS Support
 
