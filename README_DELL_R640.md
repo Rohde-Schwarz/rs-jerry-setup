@@ -153,3 +153,8 @@ Run `lspci | grep Virtual` to check whether the Virtual Functions have been crea
 b3:02.0 Ethernet controller: Intel Corporation Ethernet Virtual Function 700 Series (rev 02)
 b3:0a.0 Ethernet controller: Intel Corporation Ethernet Virtual Function 700 Series (rev 02)
 ```
+
+# GUI installation
+
+If you need the server to run a GUI, please be aware that many Linux desktops install a standby handler that sends the server into suspend mode after a certain period
+of "inactivity". Should you need both access to command line and GUI, it is advised to disable the automatic standby in the Power settings of your desktop environment.
